@@ -1,13 +1,8 @@
-webservers:
-  hosts:
-    webserver01:
-      ansible_host: 198.148.118.68
-    webserver02:
-      ansible_host: 198.148.118.129
+---
+all:
+  children:
+    documented_systems:
+      hosts:
 
-myhosts:
-  hosts:
-    my_host01:
-      ansible_host: 192.0.2.50
-    my_host02:
-      ansible_host: 192.0.2.51
+        local_system:
+          ansible_connection: local
