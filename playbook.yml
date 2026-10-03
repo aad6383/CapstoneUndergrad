@@ -1,0 +1,13 @@
+---
+- name: Start 4 Ubuntu containers
+  hosts: nuc
+  tasks:  
+    - name: Start Ubuntu Container
+      command: docker run-d ubuntu sleep infinity
+      register: container
+      with_sequence: count=4
+
+    - name: Show container ids
+      debug:
+        var: item.stdout_lines
+      with_items: "{{ container.results }}"
