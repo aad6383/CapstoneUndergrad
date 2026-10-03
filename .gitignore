@@ -1,4 +1,6 @@
-Dockerfile
-README.md
-playbook.yml
-.dockerignore
+.env
+vault/
+facts.d/
+*.pem
+__pycache__/
+*.pyc
