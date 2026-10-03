@@ -1,1 +1,4 @@
-
+Dockerfile
+README.md
+playbook.yml
+.dockerignore
