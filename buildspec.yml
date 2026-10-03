@@ -5,25 +5,38 @@ env:
     AWS_DEFAULT_REGION: us-east-2
     AWS_ACCOUNT_ID: "238596896283"
     IMAGE_REPO_NAME: capstone-doc-automation
-    IMAGE_TAG: latest
 
 phases:
   pre_build:
     commands:
-      - echo Logging in to Amazon ECR...
+      - echo "Logging in to Amazon ECR..."
       - aws --version
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - COMMIT_SHA=$(echo "$CODEBUILD_RESOLVED_SOURCE_VERSION" | cut -c 1-7)
+      - IMAGE_URI="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME"
+      - echo "Commit tag: $COMMIT_SHA"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com"
 
   build:
     commands:
-      - echo Build started on $(date)
-      - echo Building ARM64 Docker image...
-      - docker buildx build --platform linux/arm64 -t $IMAGE_REPO_NAME:$IMAGE_TAG --load .
-      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+      - echo "Running Ansible syntax check..."
+      - docker build -t capstone-doc-automation-validation .
+      - docker run --rm --entrypoint ansible-playbook capstone-doc-automation-validation --syntax-check -i inventory.yml confluence.yml
+
+      - echo "Running ansible-lint..."
+      - docker run --rm --entrypoint ansible-lint capstone-doc-automation-validation confluence.yml inventory.yml
+
+      - echo "Building ARM64 production image..."
+      - docker buildx build --platform linux/arm64 -t "$IMAGE_URI:latest" -t "$IMAGE_URI:$COMMIT_SHA" --load .
 
   post_build:
     commands:
-      - echo Build completed on $(date)
-      - echo Pushing image to ECR...
-      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
-      - echo Image pushed successfully.
+      - echo "Pushing latest image..."
+      - docker push "$IMAGE_URI:latest"
+
+      - echo "Pushing commit-tagged image..."
+      - docker push "$IMAGE_URI:$COMMIT_SHA"
+
+      - echo "Build completed successfully."
+      - echo "Published:"
+      - echo "$IMAGE_URI:latest"
+      - echo "$IMAGE_URI:$COMMIT_SHA"
