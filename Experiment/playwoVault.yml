@@ -1,0 +1,30 @@
+---
+- name: Playbook without Vault
+  gather_facts: false
+  hosts: localhost
+  # w/o vault
+  # cmd: `ansible-playbook -i inventory playwoVault.yml`
+  # vars:
+  #   mypassword: msupersecretpassword
+  tasks:
+    # w/ vault here
+    # cmd:`ansible-playbook -i inventory --ask-vault-password playwoVault.yml`
+    - name: include vault
+      ansible.builtin.include_vars:
+        # ansible-vault encrypt file (encrypt using AES256)
+        file: mypassword.yml
+    
+    - name: print variable
+      ansible.builtin.debug:
+        var: mypassword
+
+    # - name: confluence | get page data
+    #   uri:
+    #     url: https://darn.atlassian.net/rest/api/content/?expand=version
+    #     method: GET
+    #     user: kha32doanh@gmail.com
+    #     password: Capstone2023$
+    #     force_basic_auth: true
+    #     status_code: 200
+    #     return_content: yes
+    #   register: confluence_uri_response
