@@ -304,4 +304,3 @@
           - "Confluence URL: {{ confluence_base_url }}"
       tags:
         - publish
-        

@@ -25,7 +25,7 @@ phases:
       - 'docker run --rm --entrypoint ansible-playbook capstone-doc-automation-validation --syntax-check -i inventory.yml confluence.yml'
 
       - 'echo "Running ansible-lint..."'
-      - 'docker run --rm --entrypoint ansible-lint capstone-doc-automation-validation confluence.yml inventory.yml'
+      - 'docker run --rm --entrypoint ansible-lint capstone-doc-automation-validation confluence.yml'
 
       - 'echo "Building ARM64 production image..."'
       - 'docker buildx build --platform linux/arm64 -t "$IMAGE_URI:latest" -t "$IMAGE_URI:$COMMIT_SHA" --load .'
