@@ -4,3 +4,4 @@ facts.d/
 *.pem
 __pycache__/
 *.pyc
+.DS_Store
