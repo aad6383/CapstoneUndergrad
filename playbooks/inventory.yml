@@ -1,9 +1,29 @@
 ---
 all:
   children:
-    documented_systems:
+
+    linux_hosts:
       hosts:
         ec2_test_server:
-          ansible_host: "{{ lookup('env', 'TARGET_HOST') }}"
+          ansible_host: "{{ lookup('env', 'LINUX_TARGET_HOST') }}"
           ansible_user: ec2-user
+          ansible_connection: ssh
           ansible_ssh_private_key_file: /tmp/capstone-ec2-key.pem
+
+    mac_hosts:
+      hosts:
+        mac_test:
+          ansible_host: "{{ lookup('env', 'MAC_TARGET_HOST') }}"
+          ansible_user: "{{ lookup('env', 'MAC_USERNAME') }}"
+          ansible_connection: ssh
+          ansible_ssh_private_key_file: /tmp/capstone-mac-key
+
+    windows_hosts:
+      hosts:
+        windows_test:
+          ansible_host: "{{ lookup('env', 'WINDOWS_TARGET_HOST') }}"
+          ansible_user: "{{ lookup('env', 'WINDOWS_USERNAME') }}"
+          ansible_password: "{{ lookup('env', 'WINDOWS_PASSWORD') }}"
+          ansible_connection: winrm
+          ansible_winrm_transport: ntlm
+          ansible_winrm_server_cert_validation: ignore

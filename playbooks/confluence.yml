@@ -1,5 +1,5 @@
 ---
-- name: Automated Confluence Infrastructure Documentation
+- name: Automated Cross-Platform Confluence Infrastructure Documentation
   hosts: all
   become: false
   gather_facts: false
@@ -19,12 +19,19 @@
       AND space="{{ confluence_space }}"
 
   pre_tasks:
-
-    - name: Gather system facts securely
+    - name: Gather Linux and macOS facts securely
       ansible.builtin.setup:
         gather_subset:
           - all
           - "!env"
+      when: >
+        inventory_hostname in (groups.get('linux_hosts', []) + groups.get('mac_hosts', []))
+      tags:
+        - always
+
+    - name: Gather Windows facts securely
+      ansible.windows.setup:
+      when: inventory_hostname in groups.get('windows_hosts', [])
       tags:
         - always
 
@@ -38,6 +45,20 @@
         - always
 
   tasks:
+    - name: Determine platform label
+      ansible.builtin.set_fact:
+        platform_label: >-
+          {% if inventory_hostname in groups.get('windows_hosts', []) %}
+          Windows
+          {% elif inventory_hostname in groups.get('mac_hosts', []) %}
+          macOS
+          {% elif inventory_hostname in groups.get('linux_hosts', []) %}
+          Linux
+          {% else %}
+          Unknown
+          {% endif %}
+      tags:
+        - publish
 
     - name: Build infrastructure documentation
       ansible.builtin.set_fact:
@@ -49,8 +70,16 @@
           <table>
             <tbody>
               <tr>
+                <th>Inventory Name</th>
+                <td>{{ inventory_hostname }}</td>
+              </tr>
+              <tr>
+                <th>Platform</th>
+                <td>{{ platform_label | trim }}</td>
+              </tr>
+              <tr>
                 <th>Hostname</th>
-                <td>{{ ansible_facts.get('hostname', 'Unknown') }}</td>
+                <td>{{ ansible_facts.get('hostname', ansible_facts.get('computer_name', 'Unknown')) }}</td>
               </tr>
               <tr>
                 <th>FQDN</th>
@@ -59,8 +88,13 @@
               <tr>
                 <th>Operating System</th>
                 <td>
-                  {{ ansible_facts.get('distribution', 'Unknown') }}
-                  {{ ansible_facts.get('distribution_version', '') }}
+                  {% if inventory_hostname in groups.get('windows_hosts', []) %}
+                    {{ ansible_facts.get('distribution', ansible_facts.get('os_name', 'Windows')) }}
+                    {{ ansible_facts.get('distribution_version', ansible_facts.get('os_version', '')) }}
+                  {% else %}
+                    {{ ansible_facts.get('distribution', ansible_facts.get('system', 'Unknown')) }}
+                    {{ ansible_facts.get('distribution_version', ansible_facts.get('product_version', '')) }}
+                  {% endif %}
                 </td>
               </tr>
               <tr>
@@ -69,7 +103,7 @@
               </tr>
               <tr>
                 <th>Architecture</th>
-                <td>{{ ansible_facts.get('architecture', 'Unknown') }}</td>
+                <td>{{ ansible_facts.get('architecture', ansible_facts.get('machine', 'Unknown')) }}</td>
               </tr>
               <tr>
                 <th>Kernel</th>
@@ -77,15 +111,15 @@
               </tr>
               <tr>
                 <th>Processor Count</th>
-                <td>{{ ansible_facts.get('processor_count', 'Unknown') }}</td>
+                <td>{{ ansible_facts.get('processor_count', ansible_facts.get('processor_cores', 'Unknown')) }}</td>
               </tr>
               <tr>
                 <th>Virtual CPUs</th>
-                <td>{{ ansible_facts.get('processor_vcpus', 'Unknown') }}</td>
+                <td>{{ ansible_facts.get('processor_vcpus', ansible_facts.get('processor_threads_per_core', 'Unknown')) }}</td>
               </tr>
               <tr>
                 <th>Total Memory (MB)</th>
-                <td>{{ ansible_facts.get('memtotal_mb', 'Unknown') }}</td>
+                <td>{{ ansible_facts.get('memtotal_mb', ansible_facts.get('total_memory_mb', 'Unknown')) }}</td>
               </tr>
               <tr>
                 <th>Virtualization Type</th>
@@ -259,6 +293,7 @@
       ansible.builtin.debug:
         msg:
           - "System: {{ inventory_hostname }}"
+          - "Platform: {{ platform_label | trim }}"
           - "Page: {{ confluence_page_title }}"
           - "Space: {{ confluence_space }}"
           - "Confluence URL: {{ confluence_base_url }}"
