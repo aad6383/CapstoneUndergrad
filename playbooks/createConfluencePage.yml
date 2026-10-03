@@ -1,0 +1,42 @@
+# https://&lt;confluence&gt;/rest/api/content/{pageId}?expand=body.storage
+# https://darn.atlassian.net/wiki/spaces/Test/
+
+---
+
+# - name: Check that you can connect to page
+#   # uri:
+#   #   url: https://darn.atlassian.net
+
+- name: Check if Confluence page exists
+  uri:
+    url: "https://darn.atlassian.net/rest/api/content/"
+    method: GET
+    user: ""
+    password: ""
+    force_basic_auth: yes
+    status_code: 200
+  register: confluence_validate
+
+
+- name: Create Confluence page
+  uri:
+    url: https://darn.atlassian.net/rest/api/content/
+    method: POST
+    user: ""
+    password: ""
+    body: ""
+    force_basic_auth: yes
+    status_code: 201,200
+    body_format: json
+  when: confluence_validate.json.size == 0
+- name: Update Confluence page
+  uri:
+    url: "https://darn.atlassian.net//rest/api/content/"
+    method: PUT
+    user: ""
+    password: ""
+    body: ""
+    force_basic_auth: yes
+    status_code: 201,200
+    body_format: json
+  when: confluence_validate.json.size == 1

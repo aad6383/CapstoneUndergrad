@@ -1,0 +1,329 @@
+---
+- name: Using a REST API
+  become: false
+  hosts: localhost
+  # gather_facts: true
+  vars: 
+    email: "kha32doanh@gmail.com"
+    link: "https://darn.atlassian.net/wiki/"
+    rest_api_endpt: "rest/api/content/"
+    CSV_dir: "CSV_Dir"
+    CSV_File: "./gatherFacts.csv"
+    CSV_pic: "./facts.d/confluenceWeb.png"
+
+  tasks:
+    # - name: create a dir to put all CSV files into
+    #   file:
+    #     path: "../CSV_Facts_Dir"
+    #     state: directory
+    #     mode: '0755'
+    #   set_fact: "{{CSV_Dir}}"
+
+    - name: create CSV file to put data in
+      file:
+        path: "./gatherFacts.csv"
+        state: touch
+        # mode: u=rwx,g=rx,o=rx
+
+    - name: save all facts to CSV file
+      copy:
+        content: "{{ vars |
+        to_nice_json }}"
+        dest: "./file.csv"
+
+    - name: Get Token using ansible-vault
+      ansible.builtin.include_vars:
+        file: ../vault/token.yml
+      tags: get_token, create_page
+
+    - name: Get password using ansible-vault
+      ansible.builtin.include_vars:
+        file: ../vault/confluencePassword.yml
+      tags: create_page
+
+    - name: Can connect to website(GET)
+      uri: 
+        url: '{{link}}api/v2/pages'
+        user: '{{email}}'
+        password: '{{token}}'
+        method: GET
+        return_content: true
+        headers:
+          Content-Type: application/json
+        body_format: json
+        force_basic_auth: yes
+      register: re
+      tags: create_page
+      
+    # - debug:
+    #     var: re.json
+    
+    - name: Check if Confluence page exists
+      uri:
+        # url: '{{link}}{{rest_api_endpt}}?title=playbook3&spaceKey=Test&expand=body.storage,history,space,container.history,container.version,version,ancestors'
+        url: '{{link}}rest/api/content/search/?cql=title=playbook2&spaceKey=Test&expand=body,version,ancestors'
+        method: GET
+        user: '{{email}}'
+        password: '{{token}}'
+        force_basic_auth: yes   
+        headers:
+          Content-Type: application/json
+        body_format: json
+      register: check_results
+      tags: check_page, create_page
+
+    - name: set Confluence Page Id as var
+      set_fact:
+        confluencePageId: "{{check_results.json.results[0].id,}}"
+      tags: create_page
+
+    - name: Debug Info getPage
+      debug:
+        var: check_results.json
+
+    - name: Get Version Number
+      delegate_to: localhost
+      uri:
+        url: '{{link}}{{rest_api_endpt}}?title=playbook2&spaceKey=Test&expand=body.storage,history,space,container.history,container.version,version,ancestors'
+        # url: '{{link}}/{{ results.json.results[0].id}}?spaceKey=Test&expand=version'
+        method: GET
+        user: '{{email}}'
+        password: '{{token}}'
+        force_basic_auth: yes   
+        headers:
+          Content-Type: application/json
+        body_format: json
+      register: version_results
+      run_once: true
+      when: check_results.json.size != 0
+      tags: check_page, create_page
+
+    # - name: Debug getVersion no
+    #   debug:
+    #     var: version_results.json.results[0].version.number
+
+    - name: Create Confluence page
+      # delegate_to: localhost
+      uri:
+        url: '{{link}}{{rest_api_endpt}}'
+        method: POST
+        user: '{{email}}'
+        password: '{{token}}'
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body: >
+          {
+          "space":{
+            "key": "Test"
+            },
+          "type": "page",
+          "title": "playbook2",
+          "body": {
+            "storage": {
+              "representation": "storage",
+              "value": "<p>hi from playbook</p>"
+              }
+           }
+          }
+        force_basic_auth: yes
+        status_code: 201,200
+      tags: create_page
+      run_once: true
+      when: check_results.json.size == 0
+      register: createPage_results
+
+    - name: save all facts after create page to CSV file
+      copy:
+        content: "{{ createPage_results |
+        to_nice_json }}"
+        dest: "../facts.d/createPage.csv"
+      vars:
+        CSV_File: "../facts.d/createPage.csv"
+      run_once: true
+      register: setCSV_File
+      tags: create_page
+      
+    # - name: set CSV File
+    #   set_fact: 
+    #     CSV_File: "../facts.d/createPage.csv"
+    #   register: setCSV_File
+
+    - name: debug set CSV file
+      debug:
+        var: setCSV_File
+
+      when: createPage_results
+     
+    - name: Debug Info createPage
+      debug:
+        var: createPage_results
+
+    - name: see what this is
+      debug:
+        var: check_results.json.results[0].id, version_results.json.results[0].version.number
+
+    - name: Update Confluence page
+      uri:
+        url: "{{link}}{{rest_api_endpt}}{{check_results.json.results[0].id}}"
+        method: PUT
+        user: '{{email}}'
+        password: '{{token}}'
+        body: >
+          {
+            "space":{
+              "key": "Test"
+            },
+            "type": "page",
+            "title": "playbook2",
+            "body": {
+              "storage": {
+                "representation": "storage",
+                "value": "<p>hi, updated from playbook</p>"
+              }
+            },
+            "version":
+            {
+              "number": "{{ (version_results.json.results[0].version.number + 1) }}"
+            }
+          }
+        force_basic_auth: yes
+        headers:
+          Content-Type: application/json
+        status_code: 201,200
+        body_format: json
+      run_once: true
+      when: check_results.json.size == 1
+      register: updatePage_results
+      tags: create_page
+
+    # - name: Check if Attachment exists on confluence page
+    #   uri:
+    #     url: "{{link}}{{rest_api_endpt}}{{check_results.json.results[0].id}}//child/attachment?fileName=file.csv"
+    #     method: GET
+    #     user: '{{email}}'
+    #     password: '{{token}}'
+    #     force_basic_auth: yes   
+    #     headers:
+    #       Content-Type: application/json
+    #     body_format: json
+    #   register: check_attachment_results
+      # tags: check_page
+
+    - name: Get attachment data
+      uri:
+        url: '{{ link }}{{rest_api_endpt}}{{ check_results.json.results[0].id }}/child/attachment'
+        method: GET
+        user: '{{ email }}'
+        password: '{{ token }}'
+        force_basic_auth: yes
+        status_code: 200
+        return_content: yes
+      register: attachments_json
+
+    # Extract attachment ID
+    - name: Extract attachment ID for updatePage.csv
+      set_fact:
+        attachment_id: "{{ attachments_json.json.results | selectattr('title', 'equalto', 'updatePage.csv') | map(attribute='id') | first }}"
+      when: 
+        - attachments_json is defined
+        - attachments_json.json.results | length > 0
+    
+
+     # Delete the existing attachment
+    - name: Delete existing attachment
+      uri:
+        url: "{{ link }}rest/api/content/{{ attachment_id }}"
+        method: DELETE
+        user: '{{ email }}'
+        password: '{{ token }}'
+        force_basic_auth: yes
+        status_code: 204
+      when: attachment_id is defined
+
+
+    - name: set var if attachment is found
+      set_fact: 
+        # attachment_found: true
+        when: item.title == ".pem"
+        with_items: ""
+    
+    # - name: upload attachment to confluence page
+    #   command: 'curl -u {{email}}:{{token}} \ 
+    #     -X POST \
+    #     -H "X-Atlassian-Token: no-check;" \
+    #     -F "file = @facts.csv" \
+    #     -F "comment=File attached via playbook" \ 
+    #     -F "minorEdit=true" \
+    #     {{link}}{{check_results.json.results[0].id}}/child/attachment/data'
+    #   # when: attachment_found is not defined
+    #   register: upload_attachment
+
+    - name: Test REST API - Confluence Attach File
+      ansible.builtin.uri:
+        user: '{{ email }}'
+        password: '{{ token }}'
+        url: "{{link}}{{rest_api_endpt}}{{check_results.json.results[0].id}}/child/attachment"
+        validate_certs: yes
+        method: POST
+        headers:
+          X-Atlassian-Token: nocheck
+        force_basic_auth: yes
+        body_format: form-multipart
+        body:
+          file:
+            content: "{{ lookup('file','{{CSV_File}}') }}"
+            filename: updatePage.csv
+      register: result_attach
+
+    - name: Test REST API - Confluence Attach File
+      ansible.builtin.uri:
+        user: '{{ email }}'
+        password: '{{ token }}'
+        url: "{{link}}{{rest_api_endpt}}{{check_results.json.results[0].id}}/child/attachment"
+        validate_certs: yes
+        method: POST
+        headers:
+          X-Atlassian-Token: nocheck
+        force_basic_auth: yes
+        body_format: form-multipart
+        body:
+          file:
+            content: "{{ lookup('file','{{CSV_File}}') }}"
+            filename: ../facts.d/createPage.csv
+      register: result_attach
+      tags: create_page
+
+      # -F "file = {{check_attachment_results.json.results[0].id}}" \
+        # -F "comment=File attached via playbook" \ 
+
+    - name: check attachemnt debug page
+      debug:
+        var: attachments_json.json.results[0].id
+        # var: upload_attachment
+        # var: check_attachment_results
+
+
+    # - name: debug updatePage Results
+    #   debug:
+    #     var: updatePage_results
+
+    - name: save all facts after update page to CSV file
+      copy:
+        content: "{{ updatePage_results |
+        to_nice_json }}"
+        dest: "../facts.d/gatherFacts.csv"
+      run_once: true
+      when: updatePage_results
+
+    # - name: Get attachment data
+    #   uri:
+    #     url: '{{ link }}{{rest_api_endpt}}?title=playbook2&spaceKey=Test&/child/attachment'
+    #     method: POST
+    #     user: '{{ email }}'
+    #     password: '{{ token }}'
+    #     force_basic_auth: yes
+    #     status_code: 200
+    #     return_content: yes
+    #   register: attachments_json
