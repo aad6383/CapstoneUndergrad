@@ -148,6 +148,7 @@
         force_basic_auth: true
         return_content: false
         status_code: 200
+      delegate_to: localhost
       register: confluence_connection
       no_log: true
       tags:
@@ -169,6 +170,7 @@
         force_basic_auth: true
         return_content: true
         status_code: 200
+      delegate_to: localhost
       register: page_search
       no_log: true
       tags:
@@ -203,6 +205,7 @@
         force_basic_auth: true
         return_content: true
         status_code: 200
+      delegate_to: localhost
       register: existing_page
       when: page_search.json.size | int > 0
       no_log: true
@@ -233,6 +236,7 @@
           - 200
           - 201
         return_content: true
+      delegate_to: localhost
       register: page_created
       when: page_search.json.size | int == 0
       no_log: true
@@ -274,6 +278,7 @@
           - 200
           - 201
         return_content: true
+      delegate_to: localhost
       register: page_updated
       when: page_search.json.size | int > 0
       no_log: true
@@ -299,3 +304,4 @@
           - "Confluence URL: {{ confluence_base_url }}"
       tags:
         - publish
+        
