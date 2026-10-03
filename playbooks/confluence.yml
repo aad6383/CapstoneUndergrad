@@ -1,194 +1,266 @@
 ---
-- name: Gather system facts and publish documentation to Confluence
+- name: Automated Confluence Infrastructure Documentation
   hosts: all
-  gather_facts: true
   become: false
-  serial: 1
+  gather_facts: false
 
   vars:
-    # Confluence configuration
     confluence_email: "aayushdalal12@gmail.com"
     confluence_api_token: "{{ lookup('env', 'CONFLUENCE_API_TOKEN') }}"
     confluence_base_url: "https://aayushdalal12.atlassian.net/wiki/"
-    confluence_space_key: "CapstoneSp"
+    confluence_space: "CapstoneSp"
+    confluence_api_endpoint: "rest/api/content/"
 
-    # Create one Confluence page per target system.
     confluence_page_title: >-
-      {{ ansible_facts.get('hostname', inventory_hostname) }} - Infrastructure Documentation
+      {{ inventory_hostname }} - Infrastructure Documentation
 
-    # Facts used in the generated documentation.
-    system_ip: >-
-      {{ ansible_facts.get('default_ipv4', {}).get('address', ansible_host | default('N/A')) }}
-    system_os: >-
-      {{ ansible_facts.get('distribution', 'N/A') }} {{ ansible_facts.get('distribution_version', '') }}
-    system_architecture: "{{ ansible_facts.get('architecture', 'N/A') }}"
-    system_cpu_count: "{{ ansible_facts.get('processor_vcpus', 'N/A') }}"
-    system_memory_mb: "{{ ansible_facts.get('memtotal_mb', 'N/A') }}"
-    system_kernel: "{{ ansible_facts.get('kernel', 'N/A') }}"
+    confluence_cql: >-
+      title="{{ confluence_page_title }}"
+      AND space="{{ confluence_space }}"
 
   pre_tasks:
-    - name: Validate required Confluence API token
+
+    - name: Gather system facts securely
+      ansible.builtin.setup:
+        gather_subset:
+          - all
+          - "!env"
+      tags:
+        - always
+
+    - name: Validate Confluence API token
       ansible.builtin.assert:
         that:
           - confluence_api_token | length > 0
-        fail_msg: >-
-          CONFLUENCE_API_TOKEN is not set. Export the token in your shell before
-          running this playbook. Do not store the token in this file or in Git.
-      delegate_to: localhost
-
-    - name: Confirm target facts were gathered
-      ansible.builtin.assert:
-        that:
-          - ansible_facts | length > 0
-          - ansible_facts.get('hostname', '') | length > 0
-        fail_msg: "Ansible facts were not gathered successfully for {{ inventory_hostname }}."
+        fail_msg: "CONFLUENCE_API_TOKEN is not set."
+        success_msg: "Confluence API token is available."
+      tags:
+        - always
 
   tasks:
-    - name: Build Confluence page body from gathered facts
-      ansible.builtin.set_fact:
-        confluence_page_body: |
-          <h1>{{ confluence_page_title }}</h1>
-          <p>This page was generated automatically from Ansible facts.</p>
 
-          <h2>System Summary</h2>
+    - name: Build infrastructure documentation
+      ansible.builtin.set_fact:
+        documentation_html: |
+          <h1>{{ confluence_page_title }}</h1>
+
+          <h2>System Overview</h2>
+
           <table>
             <tbody>
-              <tr><th>Inventory Host</th><td>{{ inventory_hostname }}</td></tr>
-              <tr><th>Hostname</th><td>{{ ansible_facts.get('hostname', 'N/A') }}</td></tr>
-              <tr><th>IP Address</th><td>{{ system_ip }}</td></tr>
-              <tr><th>Operating System</th><td>{{ system_os }}</td></tr>
-              <tr><th>Kernel</th><td>{{ system_kernel }}</td></tr>
-              <tr><th>Architecture</th><td>{{ system_architecture }}</td></tr>
-              <tr><th>Virtual CPUs</th><td>{{ system_cpu_count }}</td></tr>
-              <tr><th>Total Memory (MB)</th><td>{{ system_memory_mb }}</td></tr>
+              <tr>
+                <th>Hostname</th>
+                <td>{{ ansible_facts.get('hostname', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>FQDN</th>
+                <td>{{ ansible_facts.get('fqdn', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Operating System</th>
+                <td>
+                  {{ ansible_facts.get('distribution', 'Unknown') }}
+                  {{ ansible_facts.get('distribution_version', '') }}
+                </td>
+              </tr>
+              <tr>
+                <th>OS Family</th>
+                <td>{{ ansible_facts.get('os_family', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Architecture</th>
+                <td>{{ ansible_facts.get('architecture', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Kernel</th>
+                <td>{{ ansible_facts.get('kernel', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Processor Count</th>
+                <td>{{ ansible_facts.get('processor_count', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Virtual CPUs</th>
+                <td>{{ ansible_facts.get('processor_vcpus', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Total Memory (MB)</th>
+                <td>{{ ansible_facts.get('memtotal_mb', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Virtualization Type</th>
+                <td>{{ ansible_facts.get('virtualization_type', 'Unknown') }}</td>
+              </tr>
+              <tr>
+                <th>Virtualization Role</th>
+                <td>{{ ansible_facts.get('virtualization_role', 'Unknown') }}</td>
+              </tr>
             </tbody>
           </table>
 
-          <h2>Automation Details</h2>
-          <p>Collected by Ansible and published through the Confluence REST API.</p>
+          <p>
+            Documentation automatically generated using Ansible and the
+            Capstone Documentation Automation System.
+          </p>
+      tags:
+        - publish
 
-    - name: Verify authentication to Confluence
+    - name: Test connection to Confluence
       ansible.builtin.uri:
-        url: "{{ confluence_base_url }}rest/api/space/{{ confluence_space_key }}"
+        url: "{{ confluence_base_url }}api/v2/pages"
         method: GET
-        user: "{{ confluence_email }}"
-        password: "{{ confluence_api_token }}"
+        url_username: "{{ confluence_email }}"
+        url_password: "{{ confluence_api_token }}"
         force_basic_auth: true
-        headers:
-          Accept: "application/json"
-        return_content: true
+        return_content: false
         status_code: 200
-      delegate_to: localhost
-      register: confluence_auth_result
-      changed_when: false
+      register: confluence_connection
+      no_log: true
       tags:
         - check_connection
 
-    - name: Search for existing documentation page
+    - name: Confirm Confluence authentication
+      ansible.builtin.debug:
+        msg: "Successfully authenticated with Confluence."
+      when: confluence_connection.status == 200
+      tags:
+        - check_connection
+
+    - name: Check whether system documentation already exists
       ansible.builtin.uri:
-        url: >-
-          {{ confluence_base_url }}rest/api/content
-          ?spaceKey={{ confluence_space_key | urlencode }}
-          &title={{ confluence_page_title | urlencode }}
-          &expand=version
+        url: "{{ confluence_base_url }}rest/api/content/search?cql={{ confluence_cql | urlencode }}&expand=version"
         method: GET
-        user: "{{ confluence_email }}"
-        password: "{{ confluence_api_token }}"
+        url_username: "{{ confluence_email }}"
+        url_password: "{{ confluence_api_token }}"
         force_basic_auth: true
-        headers:
-          Accept: "application/json"
         return_content: true
         status_code: 200
-      delegate_to: localhost
-      register: confluence_page_search
-      changed_when: false
+      register: page_search
+      no_log: true
       tags:
         - check_page
         - publish
 
-    - name: Ensure page lookup is unambiguous
-      ansible.builtin.assert:
-        that:
-          - confluence_page_search.json.results | length <= 1
-        fail_msg: >-
-          More than one Confluence page named '{{ confluence_page_title }}' exists
-          in space '{{ confluence_space_key }}'. Resolve the duplicate pages before
-          rerunning the automation.
-      delegate_to: localhost
-      tags:
-        - check_page
-        - publish
-
-    - name: Create Confluence page when it does not exist
-      ansible.builtin.uri:
-        url: "{{ confluence_base_url }}rest/api/content"
-        method: POST
-        user: "{{ confluence_email }}"
-        password: "{{ confluence_api_token }}"
-        force_basic_auth: true
-        headers:
-          Accept: "application/json"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          type: "page"
-          title: "{{ confluence_page_title }}"
-          space:
-            key: "{{ confluence_space_key }}"
-          body:
-            storage:
-              representation: "storage"
-              value: "{{ confluence_page_body }}"
-        return_content: true
-        status_code:
-          - 200
-          - 201
-      delegate_to: localhost
-      register: confluence_page_create
-      when: confluence_page_search.json.results | length == 0
-      tags:
-        - publish
-
-    - name: Update existing Confluence page
-      ansible.builtin.uri:
-        url: >-
-          {{ confluence_base_url }}rest/api/content/
-          {{ confluence_page_search.json.results[0].id }}
-        method: PUT
-        user: "{{ confluence_email }}"
-        password: "{{ confluence_api_token }}"
-        force_basic_auth: true
-        headers:
-          Accept: "application/json"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          id: "{{ confluence_page_search.json.results[0].id }}"
-          type: "page"
-          title: "{{ confluence_page_title }}"
-          space:
-            key: "{{ confluence_space_key }}"
-          body:
-            storage:
-              representation: "storage"
-              value: "{{ confluence_page_body }}"
-          version:
-            number: "{{ confluence_page_search.json.results[0].version.number | int + 1 }}"
-        return_content: true
-        status_code:
-          - 200
-          - 201
-      delegate_to: localhost
-      register: confluence_page_update
-      when: confluence_page_search.json.results | length == 1
-      tags:
-        - publish
-
-    - name: Report documentation result
+    - name: Report page search result
       ansible.builtin.debug:
         msg: >-
-          Confluence documentation for '{{ inventory_hostname }}' was
-          {{ 'created' if (confluence_page_search.json.results | length == 0) else 'updated' }}
-          as '{{ confluence_page_title }}' in space '{{ confluence_space_key }}'.
+          Documentation page {{
+            'already exists and will be updated.'
+            if page_search.json.size | int > 0
+            else 'does not exist and will be created.'
+          }}
+      tags:
+        - check_page
+        - publish
+
+    - name: Save existing Confluence page ID
+      ansible.builtin.set_fact:
+        existing_page_id: "{{ page_search.json.results[0].id }}"
+      when: page_search.json.size | int > 0
+      tags:
+        - publish
+
+    - name: Get existing Confluence page version
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}{{ confluence_api_endpoint }}{{ existing_page_id }}?expand=version"
+        method: GET
+        url_username: "{{ confluence_email }}"
+        url_password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        return_content: true
+        status_code: 200
+      register: existing_page
+      when: page_search.json.size | int > 0
+      no_log: true
+      tags:
+        - publish
+
+    - name: Create documentation page
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}{{ confluence_api_endpoint }}"
+        method: POST
+        url_username: "{{ confluence_email }}"
+        url_password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body:
+          type: page
+          title: "{{ confluence_page_title }}"
+          space:
+            key: "{{ confluence_space }}"
+          body:
+            storage:
+              representation: storage
+              value: "{{ documentation_html }}"
+        status_code:
+          - 200
+          - 201
+        return_content: true
+      register: page_created
+      when: page_search.json.size | int == 0
+      no_log: true
+      tags:
+        - publish
+
+    - name: Report page creation
+      ansible.builtin.debug:
+        msg: "Created Confluence page: {{ confluence_page_title }}"
+      when:
+        - page_created is defined
+        - page_created is not skipped
+      tags:
+        - publish
+
+    - name: Update existing documentation page
+      ansible.builtin.uri:
+        url: "{{ confluence_base_url }}{{ confluence_api_endpoint }}{{ existing_page_id }}"
+        method: PUT
+        url_username: "{{ confluence_email }}"
+        url_password: "{{ confluence_api_token }}"
+        force_basic_auth: true
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body:
+          type: page
+          title: "{{ confluence_page_title }}"
+          space:
+            key: "{{ confluence_space }}"
+          body:
+            storage:
+              representation: storage
+              value: "{{ documentation_html }}"
+          version:
+            number: "{{ existing_page.json.version.number | int + 1 }}"
+        status_code:
+          - 200
+          - 201
+        return_content: true
+      register: page_updated
+      when: page_search.json.size | int > 0
+      no_log: true
+      tags:
+        - publish
+
+    - name: Report page update
+      ansible.builtin.debug:
+        msg: "Updated Confluence page: {{ confluence_page_title }}"
+      when:
+        - page_updated is defined
+        - page_updated is not skipped
+      tags:
+        - publish
+
+    - name: Show documentation summary
+      ansible.builtin.debug:
+        msg:
+          - "System: {{ inventory_hostname }}"
+          - "Page: {{ confluence_page_title }}"
+          - "Space: {{ confluence_space }}"
+          - "Confluence URL: {{ confluence_base_url }}"
       tags:
         - publish

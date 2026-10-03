@@ -10,6 +10,10 @@ RUN pip install --no-cache-dir ansible ansible-lint
 
 COPY . /app
 
+RUN chmod +x /app/entrypoint.sh
+
 WORKDIR /app/playbooks
 
-CMD ["ansible-playbook", "-i", "inventory.yml", "confluence.yml"]
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+CMD ["ansible-playbook", "-i", "inventory.yml", "confluence.yml", "--tags", "publish"]
